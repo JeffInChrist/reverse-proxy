@@ -13,8 +13,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Yarp.ReverseProxy.Abstractions;
-using Yarp.ReverseProxy.Utilities.Tests;
+using Yarp.ReverseProxy.Common.Tests;
+using Yarp.ReverseProxy.Configuration;
 
 namespace Yarp.ReverseProxy.Common
 {
@@ -38,7 +38,7 @@ namespace Yarp.ReverseProxy.Common
                   destinationServices => { },
                   destinationApp =>
                   {
-                      destinationApp.Use(async (context, next) => await destinationGetDelegate(context));
+                      destinationApp.Run(destinationGetDelegate);
                   },
                   configureProxy,
                   configureProxyApp,
@@ -104,7 +104,7 @@ namespace Yarp.ReverseProxy.Common
                         {
                             DangerousAcceptAnyServerCertificate = useHttps,
 #if NET
-                            RequestHeaderEncoding = requestHeaderEncoding,
+                            RequestHeaderEncoding = requestHeaderEncoding?.WebName,
 #endif
                         }
                     };

@@ -4,13 +4,12 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Authentication;
-using System.Text;
 using FluentAssertions;
 using Xunit;
-using Yarp.ReverseProxy.Abstractions;
-using Yarp.ReverseProxy.Service.LoadBalancing;
-using Yarp.ReverseProxy.Service.Proxy;
-using Yarp.ReverseProxy.Service.SessionAffinity;
+using Yarp.ReverseProxy.Configuration;
+using Yarp.ReverseProxy.LoadBalancing;
+using Yarp.ReverseProxy.Forwarder;
+using Yarp.ReverseProxy.SessionAffinity;
 
 namespace Yarp.ReverseProxy.ServiceFabric.Tests
 {
@@ -27,11 +26,19 @@ namespace Yarp.ReverseProxy.ServiceFabric.Tests
                 { "YARP.Backend.BackendId", "MyCoolClusterId" },
                 { "YARP.Backend.LoadBalancingPolicy", "LeastRequests" },
                 { "YARP.Backend.SessionAffinity.Enabled", "true" },
-                { "YARP.Backend.SessionAffinity.Mode", "Cookie" },
+                { "YARP.Backend.SessionAffinity.Policy", "Cookie" },
                 { "YARP.Backend.SessionAffinity.FailurePolicy", "Return503Error" },
-                { "YARP.Backend.SessionAffinity.Settings.ParameterA", "ValueA" },
-                { "YARP.Backend.SessionAffinity.Settings.ParameterB", "ValueB" },
+                { "YARP.Backend.SessionAffinity.AffinityKeyName", "Key1" },
+                { "YARP.Backend.SessionAffinity.Cookie.Domain", "localhost" },
+                { "YARP.Backend.SessionAffinity.Cookie.Expiration", "03:00:00" },
+                { "YARP.Backend.SessionAffinity.Cookie.HttpOnly", "true" },
+                { "YARP.Backend.SessionAffinity.Cookie.IsEssential", "true" },
+                { "YARP.Backend.SessionAffinity.Cookie.MaxAge", "1.00:00:00" },
+                { "YARP.Backend.SessionAffinity.Cookie.Path", "mypath" },
+                { "YARP.Backend.SessionAffinity.Cookie.SameSite", "Strict" },
+                { "YARP.Backend.SessionAffinity.Cookie.SecurePolicy", "SameAsRequest" },
                 { "YARP.Backend.HttpRequest.Timeout", "00:00:17" },
+                { "YARP.Backend.HttpRequest.AllowResponseBuffering", "true" },
                 { "YARP.Backend.HttpRequest.Version", "1.1" },
 #if NET
                 { "YARP.Backend.HttpRequest.VersionPolicy", "RequestVersionExact" },
@@ -68,18 +75,26 @@ namespace Yarp.ReverseProxy.ServiceFabric.Tests
                 SessionAffinity = new SessionAffinityConfig
                 {
                     Enabled = true,
-                    Mode = SessionAffinityConstants.Modes.Cookie,
-                    FailurePolicy = SessionAffinityConstants.AffinityFailurePolicies.Return503Error,
-                    Settings = new Dictionary<string, string>
+                    Policy = SessionAffinityConstants.Policies.Cookie,
+                    FailurePolicy = SessionAffinityConstants.FailurePolicies.Return503Error,
+                    AffinityKeyName = "Key1",
+                    Cookie = new SessionAffinityCookieConfig
                     {
-                        { "ParameterA", "ValueA" },
-                        { "ParameterB", "ValueB" }
+                        Domain = "localhost",
+                        Expiration = TimeSpan.FromHours(3),
+                        HttpOnly = true,
+                        IsEssential = true,
+                        MaxAge = TimeSpan.FromDays(1),
+                        Path = "mypath",
+                        SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict,
+                        SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest
                     }
                 },
-                HttpRequest = new RequestProxyConfig
+                HttpRequest = new ForwarderRequestConfig
                 {
                     Timeout = TimeSpan.FromSeconds(17),
                     Version = new Version(1, 1),
+                    AllowResponseBuffering = true,
 #if NET
                     VersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionExact
 #endif
@@ -111,7 +126,7 @@ namespace Yarp.ReverseProxy.ServiceFabric.Tests
                     DangerousAcceptAnyServerCertificate = true,
 #if NET
                     EnableMultipleHttp2Connections = false,
-                    RequestHeaderEncoding = Encoding.GetEncoding("utf-8"),
+                    RequestHeaderEncoding = "utf-8",
 #endif
                     MaxConnectionsPerServer = 1000,
                     SslProtocols = SslProtocols.Tls12,
@@ -132,6 +147,7 @@ namespace Yarp.ReverseProxy.ServiceFabric.Tests
             var labels = new Dictionary<string, string>()
             {
                 { "YARP.Backend.BackendId", "MyCoolClusterId" },
+                { "YARP.Backend.SessionAffinity.AffinityKeyName", "Key1" }
             };
 
             var cluster = LabelsParser.BuildCluster(_testServiceName, labels, null);
@@ -139,8 +155,12 @@ namespace Yarp.ReverseProxy.ServiceFabric.Tests
             var expectedCluster = new ClusterConfig
             {
                 ClusterId = "MyCoolClusterId",
-                SessionAffinity = new SessionAffinityConfig(),
-                HttpRequest = new RequestProxyConfig(),
+                SessionAffinity = new SessionAffinityConfig
+                {
+                    AffinityKeyName = "Key1",
+                    Cookie = new SessionAffinityCookieConfig()
+                },
+                HttpRequest = new ForwarderRequestConfig(),
                 HealthCheck = new HealthCheckConfig
                 {
                     Active = new ActiveHealthCheckConfig(),
